@@ -8,6 +8,7 @@ import ShoppingList from './components/ShoppingList';
 import Tasks from './components/Tasks';
 import Feedback from './components/Feedback';
 import ExpenseTracker from './components/ExpenseTracker';
+import InventoryManager from './components/InventoryManager';
 function App() {
     return (
         <BrowserRouter>
@@ -19,6 +20,8 @@ function App() {
                 <Route path="/Tasks" element={<Tasks />} />
                 <Route path="/feedback" element={<Feedback />} />
                 <Route path="/ExpenseTracker" element={<ExpenseTracker/>} />
+                <Route path="/Inventorymanager" element={<InventoryManager/>} />
+
                 {/* Add more routes as needed */}
                 <Route path="/" element={<SignUp />} /> {/* Default route */}
             </Routes>

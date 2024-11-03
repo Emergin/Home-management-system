@@ -6,6 +6,7 @@ import ShoppingList from './ShoppingList';
 import Tasks from './Tasks';
 import Feedback from './Feedback';
 import ExpenseTracker from './ExpenseTracker';
+import InventoryManager from './InventoryManager';
 
 const Dashboard = () => {
     const [userId, setUserId] = useState(null);
@@ -52,6 +53,8 @@ const Dashboard = () => {
                     <Route path="/tasks" element={<Tasks userId={userId} />} />
                     <Route path="/feedback" element={<Feedback userId={userId} />} />
                     <Route path="/ExpenseTracker" element={<ExpenseTracker userId={userId} />} />
+                    <Route path="/InventoryManager" element={<InventoryManager userId={userId} />} />
+
                 </Routes>
             </div>
         </div>

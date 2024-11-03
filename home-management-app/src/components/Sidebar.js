@@ -38,6 +38,9 @@ const Sidebar = () => {
             <Link to="/ExpenseTracker">
             <button style={buttonStyle}>ExpenseTracker</button>
             </Link>
+            <Link to="/InventoryManager">
+            <button style={buttonStyle}>Inventory Manager</button>
+            </Link>
         </div>
     );
 };
