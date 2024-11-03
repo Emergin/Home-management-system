@@ -12,7 +12,7 @@ app.use(cors());
 const db = mysql.createConnection({
     host: 'localhost',
     user: 'root',
-    password: '',
+    password: 'Trubel',
 });
 
 db.connect((err) => {
@@ -96,6 +96,22 @@ db.connect((err) => {
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
         )
     `;
+    const createToolsTable = `
+    CREATE TABLE IF NOT EXISTS tools (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        user_id INT NOT NULL,
+        category ENUM('tools', 'office', 'seasonal', 'batteries') NOT NULL,
+        quantity INT NOT NULL,
+        location VARCHAR(255) NOT NULL,
+        \`condition\` ENUM('new', 'good', 'fair', 'poor') NOT NULL,
+        lastChecked DATE,
+        notes TEXT,
+        date_added TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+`;
+
 
     // Execute table creation queries
     db.query(createUserTable, (err) => {
@@ -121,6 +137,10 @@ db.connect((err) => {
     db.query(createFeedbackTable, (err) => {
         if (err) throw err;
         console.log("Feedback table created or already exists.");
+    });
+    db.query(createToolsTable, (err) => {
+        if (err) throw err;
+        console.log("Tools table created or already exists.");
     });
 });
 
@@ -345,6 +365,69 @@ app.delete('/api/priority-tasks/:taskId', (req, res) => {
             return res.status(500).json({ message: 'Error deleting task' });
         }
         res.json({ message: 'Task deleted successfully' });
+    });
+});
+
+// Fetch all tools for a user
+app.get('/api/tools/:userId', (req, res) => {
+    const userId = req.params.userId;
+    db.query('SELECT * FROM tools WHERE user_id = ?', [userId], (err, results) => {
+        if (err) {
+            console.error('Failed to fetch tools:', err);
+            res.status(500).send('Error fetching tools');
+        } else {
+            res.json(results);
+        }
+    });
+});
+
+// Add a new tool
+app.post('/api/tools', (req, res) => {
+    const { userId, name, category, quantity, location, condition, lastChecked, notes } = req.body;
+    const query = `INSERT INTO tools (user_id, name, category, quantity, location, \`condition\`, lastChecked, notes)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)`;
+    db.query(query, [userId, name, category, quantity, location, condition, lastChecked, notes], (err, result) => {
+        if (err) {
+            console.error('Failed to add tool:', err);
+            res.status(500).send('Error adding tool');
+        } else {
+            res.status(201).json({ id: result.insertId });
+        }
+    });
+});
+
+// Update an existing tool
+app.put('/api/tools/:id', (req, res) => {
+    const { name, category, quantity, location, condition, lastChecked, notes, userId } = req.body;
+    const toolId = req.params.id;
+
+    // Convert lastChecked to the correct format
+    const formattedLastChecked = new Date(lastChecked).toISOString().slice(0, 19).replace('T', ' '); // Format to 'YYYY-MM-DD HH:MM:SS'
+
+    const query = `UPDATE tools SET name = ?, category = ?, quantity = ?, location = ?, 
+                   \`condition\` = ?, lastChecked = ?, notes = ? WHERE id = ? AND user_id = ?`;
+    
+    db.query(query, [name, category, quantity, location, condition, formattedLastChecked, notes, toolId, userId], (err, result) => {
+        if (err) {
+            console.error('Failed to update tool:', err);
+            res.status(500).send('Error updating tool');
+        } else {
+            res.sendStatus(200);
+        }
+    });
+});
+
+
+// Delete a tool
+app.delete('/api/tools/:id', (req, res) => {
+    const toolId = req.params.id;
+    db.query('DELETE FROM tools WHERE id = ?', [toolId], (err, result) => {
+        if (err) {
+            console.error('Failed to delete tool:', err);
+            res.status(500).send('Error deleting tool');
+        } else {
+            res.sendStatus(200);
+        }
     });
 });
 
