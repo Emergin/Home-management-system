@@ -35,6 +35,9 @@ const Sidebar = () => {
             <Link to="/feedback">
                 <button style={buttonStyle}>Feedback</button>
             </Link>
+            <Link to="/ExpenseTracker">
+            <button style={buttonStyle}>ExpenseTracker</button>
+            </Link>
         </div>
     );
 };

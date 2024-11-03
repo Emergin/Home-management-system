@@ -7,7 +7,7 @@ import Dashboard from './components/Dashboard';
 import ShoppingList from './components/ShoppingList';
 import Tasks from './components/Tasks';
 import Feedback from './components/Feedback';
-
+import ExpenseTracker from './components/ExpenseTracker';
 function App() {
     return (
         <BrowserRouter>
@@ -18,9 +18,9 @@ function App() {
                 <Route path="/shopping-list" element={<ShoppingList  />} />
                 <Route path="/Tasks" element={<Tasks />} />
                 <Route path="/feedback" element={<Feedback />} />
-
+                <Route path="/ExpenseTracker" element={<ExpenseTracker/>} />
                 {/* Add more routes as needed */}
-                <Route path="/" element={<SignIn />} /> {/* Default route */}
+                <Route path="/" element={<SignUp />} /> {/* Default route */}
             </Routes>
         </BrowserRouter>
     );
