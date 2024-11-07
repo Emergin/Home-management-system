@@ -4,6 +4,7 @@ const mysql = require('mysql2');
 const bcrypt = require('bcrypt');
 const cors = require('cors');
 
+
 const app = express();
 app.use(express.json());
 app.use(cors());
@@ -111,6 +112,54 @@ db.connect((err) => {
         FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     )
 `;
+    const createProjectsTable = `
+    CREATE TABLE IF NOT EXISTS projects (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    userId INT NOT NULL,
+    name VARCHAR(255) NOT NULL,
+    description TEXT,
+    totalBudget DECIMAL(10,2) NOT NULL,
+    plannedDays INT NOT NULL,
+    startDate DATE NOT NULL,
+    status VARCHAR(50) DEFAULT 'Not Started',
+    progress DECIMAL(5,2) DEFAULT 0,
+    totalSpent DECIMAL(10,2) DEFAULT 0,
+    daysElapsed INT DEFAULT 0,
+    createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_userId (userId),
+    FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE
+)
+`;
+const createProjectupdatesTable = `
+CREATE TABLE IF NOT EXISTS project_updates (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    projectId INT NOT NULL,
+    userId INT NOT NULL,
+    progress DECIMAL(5,2) NOT NULL,
+    dailyExpense DECIMAL(10,2) NOT NULL,
+    notes TEXT,
+    updateDate DATE NOT NULL,
+    createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (projectId) REFERENCES projects(id) ON DELETE CASCADE,
+    INDEX idx_projectId (projectId),
+    INDEX idx_updateDate (updateDate),
+    FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE
+)
+`;
+const createHomedataTable = `
+CREATE TABLE IF NOT EXISTS home_data (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    user_id INT NOT NULL, 
+    home_value NUMERIC(15, 2) NOT NULL,
+    mortgage_balance NUMERIC(15, 2) NOT NULL,
+    next_payment_date DATE NOT NULL,
+    remaining_term INTEGER NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+)
+`;
 
 
     // Execute table creation queries
@@ -141,6 +190,18 @@ db.connect((err) => {
     db.query(createToolsTable, (err) => {
         if (err) throw err;
         console.log("Tools table created or already exists.");
+    });
+    db.query(createProjectsTable, (err) => {
+        if (err) throw err;
+        console.log("Home_projects table created or already exists.");
+    });
+    db.query(createProjectupdatesTable, (err) => {
+        if (err) throw err;
+        console.log("Project_updates table created or already exists.");
+    });
+    db.query(createHomedataTable, (err) => {
+        if (err) throw err;
+        console.log("Home_data table created or already exists.");
     });
 });
 
@@ -456,6 +517,217 @@ const checkReminders = () => {
 };
 
 setInterval(checkReminders, 24 * 60 * 60 * 1000); // Run once a day
+
+// Route to save home data
+app.post('/api/home-data', (req, res) => {
+    const { userId, homeValue, mortgageBalance, nextPaymentDate, remainingTerm } = req.body;
+    const query = `
+        INSERT INTO home_data (user_id, home_value, mortgage_balance, next_payment_date, remaining_term)
+        VALUES (?, ?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE
+            home_value = VALUES(home_value),
+            mortgage_balance = VALUES(mortgage_balance),
+            next_payment_date = VALUES(next_payment_date),
+            remaining_term = VALUES(remaining_term);
+    `;
+    const values = [userId, homeValue, mortgageBalance, nextPaymentDate, remainingTerm];
+    db.query(query, values, (error, results) => {
+        if (error) {
+            console.error('Error saving home data:', error);
+            res.status(500).json({ message: 'Error saving data' });
+        } else {
+            res.status(200).json({ message: 'Data saved successfully' });
+        }
+    });
+});
+
+// Route to retrieve home data for a specific user
+app.get('/api/home-data/:userId', (req, res) => {
+    const { userId } = req.params;
+    const query = 'SELECT * FROM home_data WHERE user_id = ?';
+    db.query(query, [userId], (error, results) => {
+        if (error) {
+            console.error('Error retrieving home data:', error);
+            res.status(500).json({ message: 'Error retrieving data' });
+        } else if (results.length > 0) {
+            res.status(200).json(results[0]);
+        } else {
+            res.status(404).json({ message: 'No data found for this user' });
+        }
+    });
+});
+
+
+app.get('/api/projects/:userId', async (req, res) => {
+    const { userId } = req.params;
+    
+    try {
+      const [projects] = await db.promise().query(
+        'SELECT * FROM projects WHERE userId = ? ORDER BY createdAt DESC',
+        [userId]
+      );
+      
+      // Calculate days elapsed for each project
+      const updatedProjects = projects.map(project => {
+        const startDate = new Date(project.startDate);
+        const today = new Date();
+        const daysElapsed = Math.floor((today - startDate) / (1000 * 60 * 60 * 24));
+        return { ...project, daysElapsed };
+      });
+      
+      res.json(updatedProjects);
+    } catch (error) {
+      console.error('Error fetching projects:', error);
+      res.status(500).json({ error: 'Failed to fetch projects' });
+    }
+  });
+  
+  // Create new project
+  app.post('/api/projects', async (req, res) => {
+    const { userId, name, description, totalBudget, plannedDays, startDate } = req.body;
+    
+    try {
+      const [result] = await db.promise().query(
+        `INSERT INTO projects 
+         (userId, name, description, totalBudget, plannedDays, startDate) 
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [userId, name, description, totalBudget, plannedDays, startDate]
+      );
+      
+      res.json({
+        id: result.insertId,
+        message: 'Project created successfully'
+      });
+    } catch (error) {
+      console.error('Error creating project:', error);
+      res.status(500).json({ error: 'Failed to create project' });
+    }
+  });
+  
+  // Add daily update
+  app.post('/api/project-updates', async (req, res) => {
+    const { projectId, userId, progress, dailyExpense, notes, updateDate } = req.body;
+    const formattedUpdateDate = updateDate.split('T')[0]; 
+    
+    try {
+      // Start transaction
+      await db.promise().beginTransaction();
+
+      
+      // Add update
+      await db.promise().query(
+        `INSERT INTO project_updates 
+         (projectId, userId, progress, dailyExpense, notes, updateDate) 
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [projectId, userId, progress, dailyExpense, notes, formattedUpdateDate]
+      );
+      
+      // Update project progress and total spent
+      await db.promise().query(
+        `UPDATE projects 
+         SET progress = ?, 
+             totalSpent = totalSpent + ? 
+         WHERE id = ?`,
+        [progress, dailyExpense, projectId]
+      );
+      
+      // Commit transaction
+      await db.promise().commit();
+      
+      res.json({ message: 'Update added successfully' });
+    } catch (error) {
+      // Rollback on error
+      await db.promise().rollback();
+      console.error('Error adding update:', error);
+      res.status(500).json({ error: 'Failed to add update' });
+    }
+  });
+  
+  // Get updates for a specific project
+  app.get('/api/project-updates/:projectId', async (req, res) => {
+    const { projectId } = req.params;
+    
+    try {
+      const [updates] = await db.promise().query(
+        `SELECT * FROM project_updates 
+         WHERE projectId = ? 
+         ORDER BY updateDate DESC`,
+        [projectId]
+      );
+      res.json(updates);
+    } catch (error) {
+      console.error('Error fetching updates:', error);
+      res.status(500).json({ error: 'Failed to fetch updates' });
+    }
+  });
+  
+  // Get project summary
+  app.get('/api/projects/:projectId/summary', async (req, res) => {
+    const { projectId } = req.params;
+    
+    try {
+      const [project] = await db.promise().query(
+        'SELECT * FROM projects WHERE id = ?',
+        [projectId]
+      );
+      
+      const [updates] = await db.promise().query(
+        `SELECT COUNT(*) as updateCount, 
+                SUM(dailyExpense) as totalExpenses,
+                MAX(updateDate) as lastUpdate
+         FROM project_updates 
+         WHERE projectId = ?`,
+        [projectId]
+      );
+      
+      res.json({
+        project: project[0],
+        summary: updates[0]
+      });
+    } catch (error) {
+      console.error('Error fetching project summary:', error);
+      res.status(500).json({ error: 'Failed to fetch project summary' });
+    }
+  });
+  
+  // Delete project
+  app.delete('/api/projects/:projectId', async (req, res) => {
+    const { projectId } = req.params;
+    
+    try {
+      await db.promise().query('DELETE FROM projects WHERE id = ?', [projectId]);
+      res.json({ message: 'Project deleted successfully' });
+    } catch (error) {
+      console.error('Error deleting project:', error);
+      res.status(500).json({ error: 'Failed to delete project' });
+    }
+  });
+  
+  // Update project details
+  app.put('/api/projects/:projectId', async (req, res) => {
+    const { projectId } = req.params;
+    const { name, description, totalBudget, plannedDays, startDate } = req.body;
+    
+    try {
+      await db.promise().query(
+        `UPDATE projects 
+         SET name = ?, 
+             description = ?, 
+             totalBudget = ?, 
+             plannedDays = ?, 
+             startDate = ? 
+         WHERE id = ?`,
+        [name, description, totalBudget, plannedDays, startDate, projectId]
+      );
+      
+      res.json({ message: 'Project updated successfully' });
+    } catch (error) {
+      console.error('Error updating project:', error);
+      res.status(500).json({ error: 'Failed to update project' });
+    }
+  });
+
+
 
 // Start server
 const PORT = 5000;
